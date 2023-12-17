@@ -1,0 +1,234 @@
+import controlP5.*;
+import peasy.*;
+import java.io.PrintWriter;
+
+ControlP5 cp5;
+PeasyCam cam;
+ArrayList<Triangle> triangles;
+PVector[][] gridPoints;
+int gridHeight = 36, gridWidth = 72;
+float radius = 200, layerHeight = 20, twistAngle = PI;
+float shapeProbability = 0.75, contourProbability = 0.5;
+boolean showNormals = false;
+boolean overBox = false;
+int boxSize = 50;
+
+void setup() {
+  size(1600, 1200, P3D);
+  cam = new PeasyCam(this, 500);
+  cam.setMinimumDistance(500);
+  cam.setMaximumDistance(1000);
+  cp5 = new ControlP5(this);
+  setupSliders();
+  generateGrid();
+}
+
+void draw() {
+  background(255);
+  lights();
+  for (Triangle triangle : triangles) {
+    triangle.display();
+  }
+
+  cam.beginHUD();
+  cp5.draw();
+  drawControlBox();
+  cam.endHUD();
+}
+
+void setupSliders() {
+  cp5.setAutoDraw(false);
+  cp5.addSlider("gridHeight").setRange(10, 100).setValue(gridHeight).setPosition(10, 10).setSize(200, 20).setId(1);
+  cp5.addSlider("gridWidth").setRange(10, 144).setValue(gridWidth).setPosition(10, 40).setSize(200, 20).setId(2);
+  cp5.addSlider("radius").setRange(50, 400).setValue(radius).setPosition(10, 70).setSize(200, 20).setId(3);
+  cp5.addSlider("layerHeight").setRange(5, 50).setValue(layerHeight).setPosition(10, 100).setSize(200, 20).setId(4);
+  cp5.addSlider("twistAngle").setRange(0, TWO_PI).setValue(twistAngle).setPosition(10, 130).setSize(200, 20).setId(5);
+  cp5.addSlider("shapeProbability").setRange(0, 1).setValue(shapeProbability).setPosition(10, 160).setSize(200, 20).setId(6);
+  cp5.addSlider("contourProbability").setRange(0, 1).setValue(contourProbability).setPosition(10, 190).setSize(200, 20).setId(7);
+  cp5.addToggle("showNormals").setValue(showNormals ? 1 : 0).setPosition(10, 220).setSize(50, 20).setId(8);
+}
+
+void controlEvent(ControlEvent event) {
+  switch(event.getName()) {
+    case "gridHeight":
+      gridHeight = (int) event.getValue();
+      break;
+    case "gridWidth":
+      gridWidth = (int) event.getValue();
+      break;
+    case "radius":
+      radius = event.getValue();
+      break;
+    case "layerHeight":
+      layerHeight = event.getValue();
+      break;
+    case "twistAngle":
+      twistAngle = event.getValue();
+      break;
+    case "shapeProbability":
+      shapeProbability = event.getValue();
+      break;
+    case "contourProbability":
+      contourProbability = event.getValue();
+      break;
+    case "showNormals":
+      showNormals = event.getValue() == 1;
+      break;
+  }
+  generateGrid();
+}
+
+void generateGrid() {
+  gridPoints = new PVector[gridHeight][gridWidth];
+  triangles = new ArrayList<Triangle>();
+  for (int i = 0; i < gridHeight; i++) {
+    for (int j = 0; j < gridWidth; j++) {
+      float angle = TWO_PI / gridWidth * j + twistAngle / gridHeight * i;
+      float x = radius * cos(angle);
+      float y = radius * sin(angle);
+      float z = i * layerHeight;
+      gridPoints[i][j] = new PVector(x, y, z);
+    }
+  }
+  buildTriangles();
+}
+
+void buildTriangles() {
+  triangles.clear();
+  for (int i = 0; i < gridHeight - 1; i++) {
+    for (int j = 0; j < gridWidth; j++) {
+      PVector p1 = gridPoints[i][j];
+      PVector p2 = gridPoints[i][(j + 1) % gridWidth];
+      PVector p3 = gridPoints[i + 1][j];
+      PVector p4 = gridPoints[i + 1][(j + 1) % gridWidth];
+      triangles.add(new Triangle(p1, p2, p3));
+      triangles.add(new Triangle(p2, p3, p4));
+    }
+  }
+}
+
+class Triangle {
+  PVector v1, v2, v3;
+  boolean displayShape, displayContour;
+  color fillColor;
+
+  Triangle(PVector v1, PVector v2, PVector v3) {
+    this.v1 = v1;
+    this.v2 = v2;
+    this.v3 = v3;
+    displayShape = random(1) < shapeProbability;
+    displayContour = random(1) < contourProbability;
+    fillColor = color(0, 0, 255, 100);
+  }
+
+  void display() {
+    stroke(0);
+    if (displayShape) {
+      fill(fillColor);
+    } else {
+      noFill();
+    }
+    beginShape(TRIANGLES);
+    vertex(v1.x, v1.y, v1.z);
+    vertex(v2.x, v2.y, v2.z);
+    vertex(v3.x, v3.y, v3.z);
+    endShape(CLOSE);
+
+    if (displayContour) {
+      stroke(255);
+      noFill();
+      beginShape();
+      vertex(v1.x, v1.y, v1.z);
+      vertex(v2.x, v2.y, v2.z);
+      vertex(v3.x, v3.y, v3.z);
+      endShape(CLOSE);
+    }
+
+    if (showNormals) {
+      displayNormal(v1, v2, v3);
+    }
+  }
+
+  void displayNormal(PVector v1, PVector v2, PVector v3) {
+    PVector e1 = PVector.sub(v2, v1);
+    PVector e2 = PVector.sub(v3, v1);
+    PVector normal = e1.cross(e2).normalize();
+    PVector centroid = new PVector((v1.x + v2.x + v3.x) / 3, (v1.y + v2.y + v3.y) / 3, (v1.z + v2.z + v3.z) / 3);
+    stroke(255, 0, 0);
+    line(centroid.x, centroid.y, centroid.z, centroid.x + normal.x * 10, centroid.y + normal.y * 10, centroid.z + normal.z * 10);
+  }
+}
+
+void drawControlBox() {
+  pushMatrix();
+  translate(width - boxSize * 1.5, boxSize * 1.5, 0);
+  if (overBox) {
+    fill(255, 0, 0);
+  } else {
+    fill(100);
+  }
+  stroke(0);
+  box(boxSize);
+  popMatrix();
+}
+
+void mouseMoved() {
+  overBox = (mouseX > width - boxSize * 1.5 && mouseX < width - boxSize * 0.5 && 
+             mouseY > boxSize * 0.5 && mouseY < boxSize * 1.5);
+}
+
+void mousePressed() {
+  if (overControlPanel()) {
+    cam.setActive(false);
+  }
+}
+
+void mouseReleased() {
+  cam.setActive(true);
+}
+
+void mouseClicked() {
+  if (overBox) {
+    exportSTL();
+  }
+}
+
+boolean overControlPanel() {
+  return mouseX < 220 && mouseY < 240;
+}
+
+void exportSTL() {
+  String filename = "output.stl";
+  PrintWriter output = createWriter(filename);
+
+  output.println("solid model");
+
+  for (Triangle t : triangles) {
+    PVector n = calculateNormal(t.v1, t.v2, t.v3);
+    output.println("facet normal " + n.x + " " + n.y + " " + n.z);
+    output.println("outer loop");
+    output.println("vertex " + t.v1.x + " " + t.v1.y + " " + t.v1.z);
+    output.println("vertex " + t.v2.x + " " + t.v2.y + " " + t.v2.z);
+    output.println("vertex " + t.v3.x + " " + t.v3.y + " " + t.v3.z);
+    output.println("endloop");
+    output.println("endfacet");
+  }
+
+  output.println("endsolid model");
+  output.flush();
+  output.close();
+  println("STL file exported: " + filename);
+}
+
+PVector calculateNormal(PVector v1, PVector v2, PVector v3) {
+  PVector e1 = PVector.sub(v2, v1);
+  PVector e2 = PVector.sub(v3, v1);
+  PVector normal = e1.cross(e2).normalize();
+  return normal;
+}
+
+void keyPressed() {
+  if (key == 'n' || key == 'N') {
+    showNormals = !showNormals;
+  }
+}
